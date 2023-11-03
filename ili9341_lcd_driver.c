@@ -375,7 +375,7 @@ static int __init ili9341_init_display(struct ili9341 *item)
 
 static void ili9341_set_window(struct ili9341 *item, int xs, int ys, int xe, int ye)
 {
-	int w, h;
+//	int w, h;
 	printk("%s(xs=%d, ys=%d, xe=%d, ye=%d)\n", __func__, xs, ys, xe, ye);
 
 	/* Column address */
@@ -395,6 +395,7 @@ static void ili9341_set_window(struct ili9341 *item, int xs, int ys, int xe, int
 	/* Memory write */
 	ili9341_write_data(item, ILI_COMMAND, 0x2C);
 
+#if 0
 	for (h = 0; h <= ye - ys; h++) {
 		for (w = 0; w <= xe - xs; w++) {
 			//Blue
@@ -411,7 +412,7 @@ static void ili9341_set_window(struct ili9341 *item, int xs, int ys, int xe, int
 			ili9341_write_data(item, ILI_DATA, 0x00);
 		}
 	}
-
+#endif
 }
 
 static void ili9341_clear_graph(struct ili9341 *item)
@@ -549,7 +550,8 @@ static void ili9341_update(struct fb_info *info, struct list_head *pagelist)
 //    struct page *page;
     int i, j;
 
-	dev_info(item->dev, "%s: pages=%d \n", __func__, item->pages_count);
+	/* Memory write */
+	ili9341_write_data(item, ILI_COMMAND, 0x2C);
 
     //Copy all pages.
     for (i=0; i<item->pages_count; i++) {
@@ -558,8 +560,8 @@ static void ili9341_update(struct fb_info *info, struct list_head *pagelist)
     			for (j=0; j<PAGE_SIZE/2; j++) {
     				item->tmpbuf_be[j] = htons(item->tmpbuf[j]);
     			}
-				/* Memory write */
-				ili9341_write_data(item, ILI_COMMAND, 0x2C);
+//				/* Memory write */
+//				ili9341_write_data(item, ILI_COMMAND, 0x2C);
 
     			ili9341_write_spi(item, item->tmpbuf_be, PAGE_SIZE/2);
     		}
@@ -568,8 +570,8 @@ static void ili9341_update(struct fb_info *info, struct list_head *pagelist)
     			for (j=0; j<PAGE_SIZE; j++) {
     				item->tmpbuf_be[j] = htons(item->tmpbuf[j]);
     			}
-				/* Memory write */
-				ili9341_write_data(item, ILI_COMMAND, 0x2C);
+//				/* Memory write */
+//				ili9341_write_data(item, ILI_COMMAND, 0x2C);
 
             	ili9341_write_spi(item, item->tmpbuf_be, PAGE_SIZE);
             }
