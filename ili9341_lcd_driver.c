@@ -684,6 +684,13 @@ static struct fb_var_screeninfo ili9341_var  = {
         .xres_virtual   = 320,
         .yres_virtual   = 240,
         .width          = 320,
+        .height         = 240,
+        .bits_per_pixel = 16,
+    	.red   			= {11, 5, 0},
+    	.green 			= {5, 6, 0},
+    	.blue 			= {0, 5, 0},
+        .activate       = FB_ACTIVATE_NOW,
+        .vmode          = FB_VMODE_NONINTERLACED,
 };
 
 static struct fb_deferred_io ili9341_defio = {
