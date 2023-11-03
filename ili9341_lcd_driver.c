@@ -34,7 +34,8 @@ module_param(mode_BGR, int, 0644);
 #define ILI_COMMAND                     1
 #define ILI_DATA                        0
 
-#define ILI_GPIO_DC						42
+#define ILI_GPIO_DC						139
+#define ILI_GPIO_RESET					138
 
 
 //static int global_counter = 0;
@@ -98,6 +99,7 @@ int ili9341_write_spi(struct ili9341 *item, void *buf, size_t len)
 	struct spi_transfer t = {
 		.tx_buf = buf,
 		.len = len,
+		.speed_hz = 20000000,
 	};
 	struct spi_message m;
 
@@ -119,6 +121,7 @@ int ili9341_write_spi_1_byte(struct ili9341 *item, unsigned char byte)
 	struct spi_transfer t = {
 		.tx_buf = &tmp_byte,
 		.len = 1,
+		.speed_hz = 20000000,
 	};
 	struct spi_message m;
 
@@ -135,16 +138,27 @@ int ili9341_write_spi_1_byte(struct ili9341 *item, unsigned char byte)
 	return spi_sync(item->spi, &m);
 }
 
-static int ili9341_init_gpio(struct ili9341 *item)
+static void __init ili9341_init_gpio(struct ili9341 *item)
 {
 	//DC high - data, DC low - command
-	return gpio_request_one(ILI_GPIO_DC, GPIOF_OUT_INIT_HIGH,
-		item->info->device->driver->name);
+	gpio_request_one(ILI_GPIO_DC, GPIOF_OUT_INIT_HIGH, "dc");
+
+	//Reset high - normal operation, Reset low - reset
+	gpio_request_one(ILI_GPIO_RESET, GPIOF_OUT_INIT_HIGH, "reset");
+
+	gpio_set_value(ILI_GPIO_RESET, 0);
+
+	mdelay(10);
+
+	gpio_set_value(ILI_GPIO_RESET, 1);
+
+	return;
 }
 
 static void ili9341_free_gpio(void)
 {
 	gpio_free(ILI_GPIO_DC);
+	gpio_free(ILI_GPIO_RESET);
 }
 
 static void ili9341_write_data(struct ili9341 *item, unsigned char dc, unsigned char value) {
@@ -207,7 +221,7 @@ static void ili9341_set_display_options(struct ili9341 *item)
 }
 
 /* Init sequence taken from: Arduino Library for the Adafruit 2.2" display */
-static int ili9341_init_display(struct ili9341 *item)
+static int __init ili9341_init_display(struct ili9341 *item)
 {
 	/* Software Reset */
 	ili9341_write_data(item, ILI_COMMAND, 0x01);
@@ -361,6 +375,7 @@ static int ili9341_init_display(struct ili9341 *item)
 
 static void ili9341_set_window(struct ili9341 *item, int xs, int ys, int xe, int ye)
 {
+	int w, h;
 	printk("%s(xs=%d, ys=%d, xe=%d, ye=%d)\n", __func__, xs, ys, xe, ye);
 
 	/* Column address */
@@ -379,6 +394,24 @@ static void ili9341_set_window(struct ili9341 *item, int xs, int ys, int xe, int
 
 	/* Memory write */
 	ili9341_write_data(item, ILI_COMMAND, 0x2C);
+
+	for (h = 0; h <= ye - ys; h++) {
+		for (w = 0; w <= xe - xs; w++) {
+			//Blue
+//			ili9341_write_data(item, ILI_DATA, 0xF8);
+//			ili9341_write_data(item, ILI_DATA, 0x00);
+			//Grean
+//			ili9341_write_data(item, ILI_DATA, 0x07);
+//			ili9341_write_data(item, ILI_DATA, 0xE0);
+			//Red
+//			ili9341_write_data(item, ILI_DATA, 0x00);
+//			ili9341_write_data(item, ILI_DATA, 0x1F);
+			//Black
+			ili9341_write_data(item, ILI_DATA, 0x00);
+			ili9341_write_data(item, ILI_DATA, 0x00);
+		}
+	}
+
 }
 
 static void ili9341_clear_graph(struct ili9341 *item)
@@ -516,6 +549,8 @@ static void ili9341_update(struct fb_info *info, struct list_head *pagelist)
 //    struct page *page;
     int i, j;
 
+	dev_info(item->dev, "%s: pages=%d \n", __func__, item->pages_count);
+
     //Copy all pages.
     for (i=0; i<item->pages_count; i++) {
     		if(i == item->pages_count-1) {
@@ -523,6 +558,9 @@ static void ili9341_update(struct fb_info *info, struct list_head *pagelist)
     			for (j=0; j<PAGE_SIZE/2; j++) {
     				item->tmpbuf_be[j] = htons(item->tmpbuf[j]);
     			}
+				/* Memory write */
+				ili9341_write_data(item, ILI_COMMAND, 0x2C);
+
     			ili9341_write_spi(item, item->tmpbuf_be, PAGE_SIZE/2);
     		}
             else {
@@ -530,6 +568,9 @@ static void ili9341_update(struct fb_info *info, struct list_head *pagelist)
     			for (j=0; j<PAGE_SIZE; j++) {
     				item->tmpbuf_be[j] = htons(item->tmpbuf[j]);
     			}
+				/* Memory write */
+				ili9341_write_data(item, ILI_COMMAND, 0x2C);
+
             	ili9341_write_spi(item, item->tmpbuf_be, PAGE_SIZE);
             }
     }
@@ -629,7 +670,7 @@ static struct fb_ops ili9341_fbops = {
         .fb_blank       = ili9341_blank,
 };
 
-static struct fb_fix_screeninfo ili9341_fix __initdata = {
+static struct fb_fix_screeninfo ili9341_fix  = {
         .id          = "ILI9341",
         .type        = FB_TYPE_PACKED_PIXELS,
         .visual      = FB_VISUAL_TRUECOLOR,
@@ -637,26 +678,18 @@ static struct fb_fix_screeninfo ili9341_fix __initdata = {
         .line_length = 320 * 2,
 };
 
-static struct fb_var_screeninfo ili9341_var __initdata = {
+static struct fb_var_screeninfo ili9341_var  = {
         .xres           = 320,
         .yres           = 240,
         .xres_virtual   = 320,
         .yres_virtual   = 240,
         .width          = 320,
-        .height         = 240,
-        .bits_per_pixel = 16,
-    	.red   			= {11, 5, 0},
-    	.green 			= {5, 6, 0},
-    	.blue 			= {0, 5, 0},
-        .activate       = FB_ACTIVATE_NOW,
-        .vmode          = FB_VMODE_NONINTERLACED,
 };
 
 static struct fb_deferred_io ili9341_defio = {
         .delay          = HZ / 35,
         .deferred_io    = &ili9341_update,
 };
-#endif
 
 static int ili9341_probe(struct platform_device *dev)
 {
@@ -665,8 +698,10 @@ static int ili9341_probe(struct platform_device *dev)
         struct fb_info *info;
      	struct device* spidevice;
 
-        dev_dbg(&dev->dev, "%s\n", __func__);
-#if 1
+		dev_info(&dev->dev, "%s\n", __func__);
+
+//        dev_dbg(&dev->dev, "%s\n", __func__);
+
         item = kzalloc(sizeof(struct ili9341), GFP_KERNEL);
         if (!item) {
                 dev_err(&dev->dev,
@@ -729,13 +764,20 @@ static int ili9341_probe(struct platform_device *dev)
         	goto out_tmpbuf_be;
         }
 
-		spidevice = bus_find_device_by_name(&spi_bus_type, NULL, "spi1.0");
+		spidevice = bus_find_device_by_name(&spi_bus_type, NULL, "spi4.1");
+		dev_info(&dev->dev, "%s: spidevice=0x%p\n", __func__, spidevice);
      	if (!spidevice) {
      		dev_err(&dev->dev, "%s: Couldn't find SPI device\n", __func__);
      		ret = -ENODEV;
      		goto out_tmpbuf_be;
      	}
      	item->spi = to_spi_device(spidevice);
+		dev_info(&dev->dev, "%s: item->spi=0x%p\n", __func__, item->spi);
+	 	if (!item->spi) {
+	 		dev_err(&dev->dev, "%s: Couldn't find SPI device\n", __func__);
+	 		ret = -ENODEV;
+	 		goto out_tmpbuf_be;
+	 	}
 
     	ili9341_init_gpio(item);
      	ili9341_init_display(item);
@@ -783,7 +825,7 @@ out:
         return ret;
 }
 
-static int ili9341_remove(struct platform_device *device)
+static int __exit ili9341_remove(struct platform_device *device)
 {
 #if 1
         struct fb_info *info = platform_get_drvdata(device);
@@ -800,7 +842,7 @@ static int ili9341_remove(struct platform_device *device)
         return 0;
 }
 
-static struct platform_driver ili9341_driver = {
+static struct platform_driver ili9341_driver  = {
         .probe = ili9341_probe,
         .remove = ili9341_remove,
         .driver = {
@@ -808,7 +850,7 @@ static struct platform_driver ili9341_driver = {
                    },
 };
 
-static int ili9341_init(void)
+static int __init ili9341_init(void)
 {
         int ret = 0;
 
@@ -832,5 +874,5 @@ static int ili9341_init(void)
 module_init(ili9341_init);
 
 MODULE_LICENSE("Dual BSD/GPL");
-MODULE_AUTHOR("Alex Nikitenko, alex.nikitenko@sirinsoftware.com");
-MODULE_DESCRIPTION("Framebuffer Driver for PiTFT with ILI9341");
+MODULE_AUTHOR("Hideto Kimura, hideto.kimura@denso-ten.com");
+MODULE_DESCRIPTION("Framebuffer Driver for Oragnge Pi 5 with ILI9341");

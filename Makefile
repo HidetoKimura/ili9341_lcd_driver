@@ -6,4 +6,4 @@ all:
 	make ARCH=arm64 CROSS_COMPILE=$(CR_C) -C $(MODULES) M=$(shell pwd) modules
 
 clean:
-	make ARCH=arm64 CROSS_COMPILE=$(CR_C) -C $(MODULES) M=$(shell pwd) clean
+	rm -rf *.o *.ko *.mod *.mod.c *.order *.symvers .*.cmd
