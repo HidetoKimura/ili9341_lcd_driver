@@ -34,9 +34,10 @@ module_param(mode_BGR, int, 0644);
 #define ILI_COMMAND                     1
 #define ILI_DATA                        0
 
-#define ILI_GPIO_DC						139
-#define ILI_GPIO_RESET					138
-
+//#define ILI_GPIO_DC						139
+//#define ILI_GPIO_RESET					138
+#define ILI_GPIO_DC						25
+#define ILI_GPIO_RESET					24
 
 //static int global_counter = 0;
 
@@ -59,7 +60,7 @@ static struct resource ili9341_resources[] = {
 
 
 static struct platform_device ili9341_device = {
-	.name		= "ili9341",
+	.name		= "ili9341_lcd",
 	.id		= 0,
 	.dev		= {
 				.platform_data		= &ili9341_data,
@@ -670,6 +671,7 @@ static struct fb_ops ili9341_fbops = {
         .fb_imageblit = ili9341_imageblit,
         .fb_setcolreg   = ili9341_setcolreg,
         .fb_blank       = ili9341_blank,
+        .fb_mmap       = fb_deferred_io_mmap,
 };
 
 static struct fb_fix_screeninfo ili9341_fix  = {
@@ -773,7 +775,9 @@ static int ili9341_probe(struct platform_device *dev)
         	goto out_tmpbuf_be;
         }
 
-		spidevice = bus_find_device_by_name(&spi_bus_type, NULL, "spi4.1");
+#define SPI_DEV_NAME "spi0.0"
+//#define SPI_DEV_NAME "spi4.1"
+		spidevice = bus_find_device_by_name(&spi_bus_type, NULL, SPI_DEV_NAME);
 		dev_info(&dev->dev, "%s: spidevice=0x%p\n", __func__, spidevice);
      	if (!spidevice) {
      		dev_err(&dev->dev, "%s: Couldn't find SPI device\n", __func__);
@@ -855,7 +859,7 @@ static struct platform_driver ili9341_driver  = {
         .probe = ili9341_probe,
         .remove = ili9341_remove,
         .driver = {
-                   .name = "ili9341",
+                   .name = "ili9341_lcd",
                    },
 };
 
@@ -880,8 +884,20 @@ static int __init ili9341_init(void)
         return ret;
 }
 
+static void __exit ili9341_exit(void)
+{
+        pr_debug("%s\n", __func__);
+
+        platform_driver_unregister(&ili9341_driver);
+
+        platform_device_unregister(&ili9341_device);
+
+        return;
+}
+
 module_init(ili9341_init);
+module_exit(ili9341_exit);
 
 MODULE_LICENSE("Dual BSD/GPL");
 MODULE_AUTHOR("Hideto Kimura, hideto.kimura@denso-ten.com");
-MODULE_DESCRIPTION("Framebuffer Driver for Oragnge Pi 5 with ILI9341");
+MODULE_DESCRIPTION("Framebuffer Driver for Pi with ILI9341");
